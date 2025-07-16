@@ -7,6 +7,8 @@ import openpyxl
 from docx import Document
 import platform
 import subprocess
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 
 class MoodleUtils:
     @staticmethod
@@ -116,47 +118,32 @@ class MoodleExtractor:
 
             num_respostas = int(n_respostas) if n_respostas.isdigit() else 0
 
-            for row in sheet.iter_rows(min_row=6, min_col=2, max_col=2):  # Coluna B
-                cell = row[0]
-                pergunta = cell.value
-                linha_real = cell.row
-
+            for row_idx in range(6, sheet.max_row + 1):
+                pergunta = sheet[f'B{row_idx}'].value
                 if pergunta:
-                    tipo = sheet[f"A{linha_real}"].value
+                    doc.add_paragraph("")
+                    doc.add_paragraph(pergunta)
+                    doc.add_paragraph("")
 
-                    if tipo == "5":
-                        doc.add_paragraph("\n")
-                        doc.add_paragraph("\n")
+                    respostas = [cell.value for cell in sheet[row_idx][2:]]
+                    porcentagens = [cell.value for cell in sheet[row_idx + 2][2:]] if row_idx + 2 <= sheet.max_row else []
 
-                    doc.add_paragraph(pergunta).style = doc.styles['Normal']
-
-                    teste_col_C = sheet.cell(row=linha_real, column=3).value
-                    teste_col_D = sheet.cell(row=linha_real, column=4).value
-
-                    if teste_col_C not in (None, "") and teste_col_D not in (None, ""):
-                        respostas = sheet.iter_rows(min_row=linha_real, max_row=linha_real, min_col=3, values_only=True)
-                        porcentagens = sheet.iter_rows(min_row=linha_real + 2, max_row=linha_real + 2, min_col=3, values_only=True)
-                        respostas = next(respostas, [])
-                        porcentagens = next(porcentagens, [])
-
+                    if respostas and porcentagens and any(respostas):
                         tabela = doc.add_table(rows=0, cols=2)
-                        tabela.autofit = True
-
+                        tabela.style = 'Plain Table 4'
                         for resp, perc in zip(respostas, porcentagens):
-                            if resp:
+                            if resp is not None and resp != "":
                                 linha = tabela.add_row().cells
                                 linha[0].text = str(resp)
                                 linha[1].text = f"{(perc * 100):.2f}%" if isinstance(perc, (int, float)) else str(perc)
                     else:
                         tabela2 = doc.add_table(rows=0, cols=1)
-                        tabela2.autofit = True
-                        comentarios = sheet.iter_rows(min_row=linha_real, max_row=linha_real + num_respostas - 1, min_col=3, max_col=3, values_only=True)
-
-                        for comentario in comentarios:
-                            texto = comentario[0]
-                            if texto:
+                        tabela2.style = 'Plain Table 4'
+                        for i in range(num_respostas):
+                            comentario = sheet.cell(row=row_idx + i, column=3).value
+                            if comentario and comentario != "":
                                 linha = tabela2.add_row().cells
-                                linha[0].text = str(texto)
+                                linha[0].text = str(comentario)
 
             docx_path = caminho_planilha.replace(".xlsx", ".docx")
             doc.save(docx_path)
@@ -187,13 +174,11 @@ class MoodleExtractor:
         login_soup = self.acessar_url(f"{self.BASE_URL}/login/index.php")
         token_input = login_soup.find("input", {"name": "logintoken"})
         if not token_input or not token_input.has_attr('value'):
-            print("[ERRO] Não foi possível encontrar o campo 'logintoken'")
-            sys.exit(1)
+            raise Exception("[ERRO] Não foi possível encontrar o campo 'logintoken'")
         payload = {'username': self.username, 'password': self.password, 'logintoken': token_input['value']}
         login_response = self.session.post(f"{self.BASE_URL}/login/index.php", data=payload)
         if "login" in login_response.url or "senha incorreta" in login_response.text.lower():
-            print("[ERRO] Falha no login.")
-            sys.exit(1)
+            raise Exception("[ERRO] Falha no login.")
         print("[2] Login realizado com sucesso.")
 
     def encerrar_sessao(self):
@@ -204,7 +189,6 @@ class MoodleExtractor:
         print("[3] Acessando categorias de cursos...")
         pagina_cursos = self.acessar_url(f"{self.BASE_URL}/course/index.php")
         categorias_alvo = ["Cursos EAD", "Cursos Presenciais", "CPT"]
-
         todos_cursos = []
 
         for categoria in categorias_alvo:
@@ -222,50 +206,13 @@ class MoodleExtractor:
             print("[ERRO] Nenhum curso encontrado.")
             sys.exit(1)
 
-        print("\n[4] Lista de cursos:")
-        numerados = []
-        contador = 1
-        for categoria in categorias_alvo:
-            print(f"\n*** {categoria} ***")
-            for curso in [c for c in todos_cursos if c.categoria == categoria]:
-                print(f"[{contador}] {curso.nome}")
-                numerados.append(curso)
-                contador += 1
-
-        print("""
-Digite:
-- os números dos cursos separados por espaço
-- ou 'EAD' para todos de Cursos EAD
-- ou 'PRES' para todos de Cursos Presenciais
-- ou 'CPT' para todos de CPT
-- ou ENTER para todos os cursos
-""")
-
-        selecao = input("Opção: ").strip().upper()
-
-        cursos_selecionados = []
-        if selecao == "EAD":
-            cursos_selecionados = [c for c in numerados if c.categoria == "Cursos EAD"]
-        elif selecao == "PRES":
-            cursos_selecionados = [c for c in numerados if c.categoria == "Cursos Presenciais"]
-        elif selecao == "CPT":
-            cursos_selecionados = [c for c in numerados if c.categoria == "CPT"]
-        elif selecao:
-            indices = [int(i) for i in selecao.split() if i.isdigit() and 1 <= int(i) <= len(numerados)]
-            cursos_selecionados = [numerados[i - 1] for i in indices]
-        else:
-            cursos_selecionados = numerados
-
-        print(f"\n[5] {len(cursos_selecionados)} curso(s) selecionado(s).\n")
-        return cursos_selecionados
+        return todos_cursos
 
     def processar_cursos(self, lista_cursos):
         for curso in lista_cursos:
             print(f"\n[6] Acessando curso: {curso.nome}")
             curso_soup = self.acessar_url(curso.url)
-
             critica_link = self.buscar_link(curso_soup, "Pesquisa", "dropdown-item") or self.buscar_link(curso_soup, "Pesquisa")
-
             if not critica_link:
                 print("    - [AVISO] Link de 'Pesquisa' não encontrado.")
                 continue
@@ -273,13 +220,11 @@ Digite:
             print(f"    - Link de críticas encontrado: {critica_link['href']}")
             pesquisa_soup = self.acessar_url(critica_link['href'])
             tabela = pesquisa_soup.find("table", class_="generaltable")
-
             if not tabela:
                 print("    - [AVISO] Tabela de críticas não encontrada.")
                 continue
 
             linhas = tabela.find_all("tr")[1:]
-
             for linha in linhas:
                 colunas = linha.find_all("td")
                 if len(colunas) >= 2:
@@ -292,11 +237,99 @@ Digite:
                         print(f"    - Acessando link de Análise: {link_analise['href']}")
                         self.baixar_excel(MoodleUtils.completar_url(self.BASE_URL, link_analise['href']), curso.pasta, nome_arquivo, curso.nome)
 
+def iniciar_interface_grafica():
+    def executar_geracao():
+        username = entrada_usuario.get().strip()
+        password = entrada_senha.get().strip()
+        if not username or not password:
+            messagebox.showerror("Erro", "Usuário e senha são obrigatórios.")
+            return
+        try:
+            extractor = MoodleExtractor(username, password)
+            extractor.login()
+            janela.destroy()
+
+            # Realiza a listagem e captura dos cursos
+            print("[GUI] Listando cursos...")
+            cursos = extractor.listar_cursos_categorias()
+
+            # Interface de seleção de cursos com scroll e seleção múltipla
+            nova_janela = tk.Tk()
+            nova_janela.title("Seleção de Cursos")
+            nova_janela.geometry("600x500")
+
+            tk.Label(nova_janela, text="Selecione os cursos desejados:").pack(pady=5)
+
+            frame_lista = tk.Frame(nova_janela)
+            frame_lista.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+            scrollbar = tk.Scrollbar(frame_lista)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+            lista_cursos = tk.Listbox(frame_lista, selectmode=tk.MULTIPLE, yscrollcommand=scrollbar.set, width=80, height=20)
+            lista_cursos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            scrollbar.config(command=lista_cursos.yview)
+
+            cursos_numerados = []
+            categorias = ["Cursos EAD", "Cursos Presenciais", "CPT"]
+            for categoria in categorias:
+                lista_cursos.insert(tk.END, f"--- {categoria} ---")
+                for curso in [c for c in cursos if c.categoria == categoria]:
+                    lista_cursos.insert(tk.END, curso.nome)
+                    cursos_numerados.append(curso)
+
+            def processar():
+                selecionados_indices = lista_cursos.curselection()
+                selecionados = []
+                for i in selecionados_indices:
+                    item = lista_cursos.get(i)
+                    if item.startswith("---"):
+                        continue  # Ignora divisores de categoria
+                    # Encontra o curso correspondente na lista numerada
+                    for curso in cursos:
+                        if curso.nome == item:
+                            selecionados.append(curso)
+                            break
+
+                if not selecionados:
+                    messagebox.showerror("Erro", "Nenhum curso selecionado.")
+                    return
+
+                nova_janela.destroy()
+                extractor.processar_cursos(selecionados)
+                extractor.encerrar_sessao()
+                messagebox.showinfo("Concluído", "Processamento finalizado com sucesso!")
+
+            tk.Button(nova_janela, text="Processar Selecionados", command=processar).pack(pady=10)
+
+            nova_janela.mainloop()
+
+        except Exception as e:
+            messagebox.showerror("Erro", str(e))
+
+    janela = tk.Tk()
+    janela.title("Gerador de Relatórios Moodle")
+    janela.geometry("400x200")
+
+    tk.Label(janela, text="Usuário:").pack(pady=5)
+    entrada_usuario = tk.Entry(janela, width=30)
+    entrada_usuario.pack(pady=5)
+
+    tk.Label(janela, text="Senha:").pack(pady=5)
+    entrada_senha = tk.Entry(janela, show="*", width=30)
+    entrada_senha.pack(pady=5)
+
+    tk.Button(janela, text="Executar", command=executar_geracao).pack(pady=20)
+
+    janela.mainloop()
+
 if __name__ == "__main__":
-    username = input("Digite o usuário: ").strip()
-    password = getpass.getpass("Digite a senha: ").strip()
-    extractor = MoodleExtractor(username, password)
-    extractor.login()
-    cursos = extractor.listar_cursos_categorias()
-    extractor.processar_cursos(cursos)
-    extractor.encerrar_sessao()
+    iniciar_interface_grafica()
+
+
+    # Falta alterar/formatar a largura da coluna para os números ficarem mais a direita e os textos em menos linhas
+    # Falta verificar a possibilidade de transpor as tabelas, de forma a ocuparem menos espaço. (Pelo menos as tabelas de 0 a 10)
+    # Falta formatar os parágrafos.
+    # Falta formatar dentro da tabela (a primeira linha e a primeira coluna estão saindo em negrito)
+    
