@@ -138,6 +138,7 @@ class MoodleExtractor:
                                 linha[1].text = f"{(perc * 100):.2f}%" if isinstance(perc, (int, float)) else str(perc)
                     else:
                         tabela2 = doc.add_table(rows=0, cols=1)
+
                         tabela2.style = 'Plain Table 4'
                         for i in range(num_respostas):
                             comentario = sheet.cell(row=row_idx + i, column=3).value
@@ -174,6 +175,7 @@ class MoodleExtractor:
         login_soup = self.acessar_url(f"{self.BASE_URL}/login/index.php")
         token_input = login_soup.find("input", {"name": "logintoken"})
         if not token_input or not token_input.has_attr('value'):
+
             raise Exception("[ERRO] Não foi possível encontrar o campo 'logintoken'")
         payload = {'username': self.username, 'password': self.password, 'logintoken': token_input['value']}
         login_response = self.session.post(f"{self.BASE_URL}/login/index.php", data=payload)
@@ -189,6 +191,8 @@ class MoodleExtractor:
         print("[3] Acessando categorias de cursos...")
         pagina_cursos = self.acessar_url(f"{self.BASE_URL}/course/index.php")
         categorias_alvo = ["Cursos EAD", "Cursos Presenciais", "CPT"]
+
+
         todos_cursos = []
 
         for categoria in categorias_alvo:
@@ -236,6 +240,7 @@ class MoodleExtractor:
                     if link_analise:
                         print(f"    - Acessando link de Análise: {link_analise['href']}")
                         self.baixar_excel(MoodleUtils.completar_url(self.BASE_URL, link_analise['href']), curso.pasta, nome_arquivo, curso.nome)
+
 
 def iniciar_interface_grafica():
     def executar_geracao():
@@ -333,3 +338,4 @@ if __name__ == "__main__":
     # Falta formatar os parágrafos.
     # Falta formatar dentro da tabela (a primeira linha e a primeira coluna estão saindo em negrito)
     
+

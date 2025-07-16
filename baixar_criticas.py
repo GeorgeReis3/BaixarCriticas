@@ -213,6 +213,7 @@ class MoodleExtractor:
             print(f"\n[6] Acessando curso: {curso.nome}")
             curso_soup = self.acessar_url(curso.url)
             critica_link = self.buscar_link(curso_soup, "Pesquisa", "dropdown-item") or self.buscar_link(curso_soup, "Pesquisa")
+
             if not critica_link:
                 print("    - [AVISO] Link de 'Pesquisa' não encontrado.")
                 continue
@@ -220,6 +221,7 @@ class MoodleExtractor:
             print(f"    - Link de críticas encontrado: {critica_link['href']}")
             pesquisa_soup = self.acessar_url(critica_link['href'])
             tabela = pesquisa_soup.find("table", class_="generaltable")
+
             if not tabela:
                 print("    - [AVISO] Tabela de críticas não encontrada.")
                 continue
@@ -236,6 +238,7 @@ class MoodleExtractor:
                     if link_analise:
                         print(f"    - Acessando link de Análise: {link_analise['href']}")
                         self.baixar_excel(MoodleUtils.completar_url(self.BASE_URL, link_analise['href']), curso.pasta, nome_arquivo, curso.nome)
+
 
 def iniciar_interface_grafica():
     def executar_geracao():
@@ -333,3 +336,4 @@ if __name__ == "__main__":
     # Falta formatar os parágrafos.
     # Falta formatar dentro da tabela (a primeira linha e a primeira coluna estão saindo em negrito)
     
+
